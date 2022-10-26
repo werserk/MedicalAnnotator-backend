@@ -1,7 +1,6 @@
 import pydicom
 import os
 import json
-import tifffile as tiff
 import numpy as np
 
 
@@ -61,8 +60,7 @@ def reformat_survey(src_path, dst_path):
     with open(os.path.join(dst_path, filename + '_tags.json'), mode='w') as f:
         json.dump(tags, f)
     scan = np.array(scan, dtype=np.float32).tobytes()
-    return scan  # TODO: scan - байты, отсылаем на фронт
-    # tiff.imwrite(os.path.join(dst_path, filename + '.tiff'), scan)
+    return scan, tags
 
 
 def read_survey(path):
