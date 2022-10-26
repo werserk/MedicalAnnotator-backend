@@ -4,11 +4,15 @@ import uuid
 
 User = settings.AUTH_USER_MODEL
 
-class AuthUploadedFile(models.Model):
+
+class Study(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    unique_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    name = models.CharField(max_length=20)
+
+
+class Instance(models.Model):
+    study = models.ForeignKey(Study, on_delete=models.CASCADE)
+    name = models.CharField(max_length=255)
 
     def __str__(self):
-        return self.user.username
-    
-# функционал ctrl z под вопросом, непонятно, где и как хранить изображения
+        return self.name

@@ -60,6 +60,7 @@ def reformat_survey(src_path, dst_path):
     with open(os.path.join(dst_path, filename + '_tags.json'), mode='w') as f:
         json.dump(tags, f)
     tiff.imwrite(os.path.join(dst_path, filename + '.tiff'), scan)
+    return tags
 
 
 def read_survey(path):

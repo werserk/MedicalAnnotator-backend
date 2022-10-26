@@ -6,9 +6,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECRET_KEY = os.environ["SECRET_KEY"]
 SECRET_KEY = 'django-insecure-aw1whsf2uepq@!o9f$#t@a^3$%yohsiov38t941==cx2w1tdc5'
 
-ALLOWED_HOSTS = ['achedge.net', '194.163.155.195', '127.0.0.1']
+ALLOWED_HOSTS = ['127.0.0.1']
 
 DEBUG = True
+
+HOST = "http://127.0.0.1:8000"
 
 # Custom user model
 AUTH_USER_MODEL = 'accounts.UserAccount'
@@ -115,7 +117,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Static settings
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [
-    # os.path.join(BASE_DIR, 'build/static')
+    os.path.join(BASE_DIR, 'build/static')
 ]
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
