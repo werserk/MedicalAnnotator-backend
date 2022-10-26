@@ -63,7 +63,7 @@ class InstanceProcessingView(APIView):
         except IndexError:
             return Response({"error": "study does not exist"})
         try:
-            instance = Instance.objects.filter(study=study, name=instance_name)
+            instance = Instance.objects.get(study=study, name=instance_name) # пока что для одного файла
         except IndexError:
             return Response({"error": "instance does not exist"})
         web_path = settings.MEDIA_ROOT + "/" + user.username + "/" + study_name + "/" + "web" + "/"
@@ -112,6 +112,6 @@ class InstanceViewSet(ReadOnlyModelViewSet):
     
     def get_queryset(self, **kwargs):
         user = self.request.user
-        study = Study.objects.get(name=kwargs["study"], user=user)
-        queryset = self.queryset.filter(user=user, study=study)
+        study = Study.objects.get(name=self.kwargs["study"], user=user)
+        queryset = self.queryset.filter(study=study)
         return queryset
