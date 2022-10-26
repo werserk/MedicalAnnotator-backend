@@ -1,10 +1,17 @@
-from email.policy import default
 from rest_framework import serializers
-from .models import AuthUploadedFile
+from .models import Study, Instance
 
-class AuthUploadedFileSerializer(serializers.ModelSerializer):
+class StudyViewSetSerializer(serializers.ModelSerializer):
     user = serializers.CharField(source='user.username')
 
     class Meta:
-        model = AuthUploadedFile
-        fields = ("user", )
+        model = Study
+        fields = ("name", )
+
+
+class InstanceViewSetSerializer(serializers.ModelSerializer):
+    user = serializers.CharField(source='user.username')
+
+    class Meta:
+        model = Instance
+        fields = ("name", )
