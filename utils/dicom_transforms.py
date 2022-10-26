@@ -2,6 +2,7 @@ import pydicom
 import os
 import json
 import tifffile as tiff
+import numpy as np
 
 
 def apply_boolean_mask(array, array_criterion, criterion, value):
@@ -59,7 +60,9 @@ def reformat_survey(src_path, dst_path):
     tags = data2tags(data)
     with open(os.path.join(dst_path, filename + '_tags.json'), mode='w') as f:
         json.dump(tags, f)
-    tiff.imwrite(os.path.join(dst_path, filename + '.tiff'), scan)
+    scan = np.array(scan, dtype=np.float32).tobytes()
+    return scan  # TODO: scan - байты, отсылаем на фронт
+    # tiff.imwrite(os.path.join(dst_path, filename + '.tiff'), scan)
 
 
 def read_survey(path):
