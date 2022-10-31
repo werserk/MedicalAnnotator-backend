@@ -31,8 +31,6 @@ class FileUploadView(APIView):
         path = settings.MEDIA_ROOT + "/" + user.username + "/" + dirname + "/"
         study = Study(name=dirname, user=user)
         instance_name = "".join(file_obj.name.split(".")[:-1])
-        print(file_obj.name)
-        print(instance_name)
 
         if not os.path.exists(path):
             os.makedirs(path)

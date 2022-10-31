@@ -8,6 +8,9 @@ class Study(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     name = models.CharField(max_length=20)
 
+    def __str__(self):
+        return self.name
+
 
 class Instance(models.Model):
     FILE_UPLOAD_TYPES = [("DIR", "Directory"), ("FILE", "File")]
