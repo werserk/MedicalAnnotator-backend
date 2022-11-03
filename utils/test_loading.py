@@ -80,6 +80,22 @@ def main():
         image = get_saggital_slice(array, 250)
         visualize(image)
 
+        single_slice.pixel_array = image
+        single_slice.save_as('MyCoolDicomName.dcm')
+
+
+def get_my_slices(array, idx, axis=0):
+    window_width = 10
+    left_idx = min(idx - window_width, 0)
+    right_idx = max(idx + window_width, array.shape[axis])
+    for i in range(left_idx, right_idx + 1):
+        if axis == 0:
+            yield get_axial_slice(array, i)
+        elif axis == 1:
+            yield get_coronal_slice(array, i)
+        elif axis == 2:
+            yield get_saggital_slice(array, i)
+
 
 if __name__ == '__main__':
     main()
