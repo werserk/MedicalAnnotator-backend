@@ -1,19 +1,11 @@
-from email.policy import default
+import django
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django.contrib.auth.models import AbstractUser, PermissionsMixin, UserManager
 from django.utils.timezone import now
 import uuid
 
-from storage.models import Study
-
-
-class UserAccount(AbstractBaseUser, PermissionsMixin):
-    id = models.UUIDField(primary_key = True, default = uuid.uuid4, editable = False)
-    username = models.CharField(max_length=255, unique=True)
-    last_login = models.DateTimeField(default=now, blank=True)
-    studies = models.ForeignKey(Study, on_delete=models.CASCADE)
-
-    def create_user(self, username, password=None):
+class MyUserManager(UserManager):
+    def create_user(self, username, password):
         if not username:
             raise ValueError("Users must have a username")
 
@@ -23,21 +15,51 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
         user.set_password(password)
         user.save()
 
-        return user  
+        return user
+
+    def create_advanced_user(self, username, password):
+        user = self.create_user(username, password)
+
+        superuser = SuperUser(related_user=user)
+        user.is_advanced = True
+        superuser.save()
+        user.save()
+        
+        return superuser
+        
+    def create_common_user(self, username, password=None):
+        user = self.create_user(username, password)
+
+        common_user = User(related_user=user)
+        common_user.save()
+
+        return common_user
+
+
+class UserAccount(AbstractUser, PermissionsMixin):
+    unique_id = models.UUIDField(default=uuid.uuid4, editable=False)
+    username = models.CharField(max_length=255, unique=True)
+    is_advanced = models.BooleanField(default=False)
+    studies_completed = models.IntegerField(default=0)
+    
+    objects = MyUserManager()
 
     USERNAME_FIELD = "username"
 
     def __str__(self):
         return self.username
+    
+
+class User(models.Model):
+    related_user = models.OneToOneField(UserAccount, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.related_user.username
 
 
-class SuperUserAccount(UserAccount):
-    users = models.ForeignKey(UserAccount, on_delete=models.CASCADE)
+class SuperUser(models.Model):
+    related_user = models.OneToOneField(UserAccount, on_delete=models.CASCADE)
+    users = models.ManyToManyField(User, related_name="users", blank=True)
 
-    def create_user(self, username, password):
-        user = self.create_user(username, password)
-
-        user.is_superuser = True
-        user.save()
-
-        return user  
+    def __str__(self):
+        return self.related_user.username

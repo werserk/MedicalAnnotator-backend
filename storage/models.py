@@ -1,22 +1,40 @@
 from django.db import models
-from django.conf import settings
+from django.utils.timezone import now
+import uuid
 
-User = settings.AUTH_USER_MODEL
+from accounts.models import UserAccount
 
 
 class Study(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    name = models.CharField(max_length=20)
+    HP = "HP"
+    OT = "ОТ"
+    BPR = "ВПР"
+    P = "Р"
+
+    STATE_COICES = [
+        (HP, "Не размечен"),
+        (OT, "Отклонён"),
+        (BPR, "В процессе разметки "),
+        (P, "Размечен"),
+    ]
+    unique_id = models.UUIDField(default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=20, blank=True, null=True)
+    date_upload = models.DateField(default=now, blank=True, null=True)
+    done = models.CharField(max_length=10, blank=True, null=True)
+    modality = models.CharField(max_length=16, null=True, blank=True)
+    patient_id = models.CharField(max_length=255, blank=True, null=True)
+    state = models.CharField(choices=STATE_COICES, default='НР', max_length=3)
+    user = models.ForeignKey(UserAccount, on_delete=models.CASCADE)
 
     def __str__(self):
         return self.name
+    
+    def all(self):
+        fields = self._meta.get_fields()
+        values = {}
+        for field in fields:
+            values[field.attname] = getattr(self, field.attname)
+        return values
 
-
-class Instance(models.Model):
-    FILE_UPLOAD_TYPES = [("DIR", "Directory"), ("FILE", "File")]
-    study = models.ForeignKey(Study, on_delete=models.CASCADE)
-    name = models.CharField(max_length=255)
-    upload_type = models.CharField(max_length=4, choices=FILE_UPLOAD_TYPES, default="FILE",)
-
-    def __str__(self):
-        return self.name
+    class Meta:
+        ordering = ['date_upload']
