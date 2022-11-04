@@ -11,6 +11,7 @@ from django.conf import settings
 from wsgiref.util import FileWrapper
 from django.http import HttpResponse
 import pydicom
+import numpy as np
 
 # # TODO: processing mult files
 
@@ -101,42 +102,6 @@ class FileUploadView(APIView):
             Response({"error": "Не смогли загрузить файл"}, status=500)
 
 
-class StudyProcessingView(APIView):
-    permission_classes = (permissions.IsAuthenticated, )
-
-    def get(self, request, format=None, **kwargs):
-        user = request.user
-        study = user.study_set.get(unique_id=kwargs["unique_id"])
-
-        path = settings.MEDIA_ROOT + "/" + user.username + "/" + study.patient_id + "/" + study.instance_id + "/"
-        web_path = user.username + "/" + study.patient_id + "/" + study.instance_id
-
-        file_names = os.listdir(path)
-        web_paths = []
-        for name in file_names:
-            web_paths.append(web_path + "/" + name)
-        return Response({"paths": [web_paths]})
-    
-
-    def patch(self, request, format=None, **kwargs):
-        user = request.user
-        try:
-            study = user.study_set.get(unique_id=kwargs["unique_id"])
-        except Study.DoesNotExist:
-            return Response({"error": "Исследование не найдено"}, status=400)
-        study.comment = request.data['comment']
-        study.save()
-        return Response({"success": "Комментарий успешно обновлен"})
-    
-    def delete(self, request, format=None, **kwargs):
-        user = request.user
-        try:
-            study = user.study_set.get(unique_id=kwargs["unique_id"])
-        except Study.DoesNotExist:
-            return Response({"error": "Исследование не найдено"}, status=400)
-        study.delete()
-        return Response({"success": "Комментарий успешно удален"})
-
 def get_axial_slice(image, ind):
     return image[ind, :, :]
 
@@ -160,6 +125,52 @@ def get_my_slices(array, idx, axis=0):
             yield get_coronal_slice(array, i)
         elif axis == 2:
             yield get_saggital_slice(array, i)
+
+
+def slice_survey(paths, idx, axis=0):
+    for path in paths:
+        single_slice = pydicom.dcmread(path)
+        array.append(single_slice.pixel_array)
+    array = np.array(array)
+    image = get_my_slices(array, idx, axis)
+
+
+class StudyProcessingView(APIView):
+    permission_classes = (permissions.IsAuthenticated, )
+
+    def get(self, request, format=None, **kwargs):
+        user = request.user
+        study = user.study_set.get(unique_id=kwargs["unique_id"])
+
+        path = settings.MEDIA_ROOT + "/" + user.username + "/" + study.patient_id + "/" + study.instance_id + "/"
+        web_path = user.username + "/" + study.patient_id + "/" + study.instance_id
+
+        file_names = os.listdir(path)
+        paths = [path + file_name for file_name in file_names]
+
+        slices_paths = slice_survey(paths, idx=0)
+
+        return Response({"paths": [slices_paths]})
+    
+
+    def patch(self, request, format=None, **kwargs):
+        user = request.user
+        try:
+            study = user.study_set.get(unique_id=kwargs["unique_id"])
+        except Study.DoesNotExist:
+            return Response({"error": "Исследование не найдено"}, status=400)
+        study.comment = request.data['comment']
+        study.save()
+        return Response({"success": "Комментарий успешно обновлен"})
+    
+    def delete(self, request, format=None, **kwargs):
+        user = request.user
+        try:
+            study = user.study_set.get(unique_id=kwargs["unique_id"])
+        except Study.DoesNotExist:
+            return Response({"error": "Исследование не найдено"}, status=400)
+        study.delete()
+        return Response({"success": "Комментарий успешно удален"})
 
 
 class GetDicomEndpoint(APIView):
