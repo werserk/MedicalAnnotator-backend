@@ -13,6 +13,7 @@ from django.http import HttpResponse
 import pydicom
 import numpy as np
 
+
 # # TODO: processing mult files
 
 def parse_dicom(file):
@@ -36,17 +37,17 @@ def parse_dicom(file):
         patient_id = data[("0010", "0020")].value
     except KeyError:
         patient_id = "-"
-    
+
     try:
         instance_id = data[("0020", "000E")].value
     except KeyError:
         instance_id = "-"
 
     return name, modality, done, patient_id, instance_id
-    
+
 
 class FileUploadView(APIView):
-    permission_classes = (permissions.IsAuthenticated, )
+    permission_classes = (permissions.IsAuthenticated,)
 
     def put(self, request, format=None):
         user = request.user
@@ -56,7 +57,7 @@ class FileUploadView(APIView):
             return Response({"error": "File does not exist"}, status=400)
 
         user = self.request.user
-        dir_path = settings.MEDIA_ROOT + "/" + user.username + "/" 
+        dir_path = settings.MEDIA_ROOT + "/" + user.username + "/"
         file = file_obj.read()
 
         try:
@@ -95,7 +96,8 @@ class FileUploadView(APIView):
                     return Response({"error": "Вы уже загружали это исследование"}, status=400)
                 new_zip.extractall(path=path)
                 new_zip.close()
-            study = Study(done=done, name=name, modality=modality, user=user, patient_id=patient_id, instance_id=instance_id)
+            study = Study(done=done, name=name, modality=modality, user=user, patient_id=patient_id,
+                          instance_id=instance_id)
             study.save()
             return Response({"success": "Successfully uploaded"}, status=200)
         except Exception:
@@ -114,8 +116,7 @@ def get_saggital_slice(image, ind):
     return image[:, :, ind]
 
 
-def get_my_slices(array, idx, axis=0):
-    window_width = 10
+def get_my_slices(array, idx, axis=0, window_width=5):
     left_idx = min(idx - window_width, 0)
     right_idx = max(idx + window_width, array.shape[axis])
     for i in range(left_idx, right_idx + 1):
@@ -127,16 +128,25 @@ def get_my_slices(array, idx, axis=0):
             yield get_saggital_slice(array, i)
 
 
-def slice_survey(paths, idx, axis=0):
-    for path in paths:
+def slice_survey(paths, idx, axis=0, dst_folder='my_folder/'):
+    # paths - все пути секвенции DICOM
+    WINDOW_WIDTH = 5
+    array = []
+    for path in paths:  # Создаём 3D объект
         single_slice = pydicom.dcmread(path)
         array.append(single_slice.pixel_array)
     array = np.array(array)
-    image = get_my_slices(array, idx, axis)
+
+    # Выбираем нужные нам срезы
+    for i, image in enumerate(get_my_slices(array, idx, axis, window_width=WINDOW_WIDTH)):
+        single_slice.pixel_array = image
+        path = os.path.join(dst_folder, str(axis), str(idx) + '.dcm')
+        single_slice.save_as(path)  # Сохраняем
+        yield path
 
 
 class StudyProcessingView(APIView):
-    permission_classes = (permissions.IsAuthenticated, )
+    permission_classes = (permissions.IsAuthenticated,)
 
     def get(self, request, format=None, **kwargs):
         user = request.user
@@ -151,7 +161,6 @@ class StudyProcessingView(APIView):
         slices_paths = slice_survey(paths, idx=0)
 
         return Response({"paths": [slices_paths]})
-    
 
     def patch(self, request, format=None, **kwargs):
         user = request.user
@@ -162,7 +171,7 @@ class StudyProcessingView(APIView):
         study.comment = request.data['comment']
         study.save()
         return Response({"success": "Комментарий успешно обновлен"})
-    
+
     def delete(self, request, format=None, **kwargs):
         user = request.user
         try:
@@ -174,7 +183,7 @@ class StudyProcessingView(APIView):
 
 
 class GetDicomEndpoint(APIView):
-    permission_classes = (permissions.IsAuthenticated, )
+    permission_classes = (permissions.IsAuthenticated,)
 
     def get(self, request, format=None):
         path = request.GET.get("path", "")
@@ -190,7 +199,7 @@ class GetDicomEndpoint(APIView):
 
 
 class StudyListView(APIView):
-    permission_classes = (permissions.IsAuthenticated, )
+    permission_classes = (permissions.IsAuthenticated,)
 
     def get(self, request, format=None, **kwargs):
         if "unique_id" in kwargs:
