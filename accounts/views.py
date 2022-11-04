@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import permissions, status
 
 from accounts.serializers import UsersListViewSerializer
-from .models import UserAccount, User, SuperUser
+from .models import UserAccount, User
 
 class SignupView(APIView):
     permission_classes = (permissions.AllowAny, )
@@ -37,16 +37,6 @@ class SignupView(APIView):
             return Response({"error": "Passwords do not match"})
 
 
-class CurrentUser(APIView):
-    permission_classes = (permissions.IsAuthenticated, )
-
-    def get(self, request, format=None):
-        user = self.request.user
-        if not user.username:
-            return Response({"error": "Войдите пожалалуйста в аккаунт"}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"user": {"name": user.username}}, status=status.HTTP_200_OK)
-
-
 class UsersListView(APIView):
     permission_classes = (permissions.IsAuthenticated, )
     serializer_class = UsersListViewSerializer
@@ -65,6 +55,7 @@ class UsersListView(APIView):
                 {"username": related_user.username,
                 "studies_completed": related_user.studies_completed,
                 "studies": related_user.study_set.all().count(),
+                "unique_id": related_user.unique_id
                 }
             )
         return Response(data)

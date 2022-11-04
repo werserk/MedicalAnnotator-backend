@@ -12,10 +12,10 @@ class Study(models.Model):
     P = "Р"
 
     STATE_COICES = [
-        (HP, "Не размечен"),
-        (OT, "Отклонён"),
-        (BPR, "В процессе разметки "),
-        (P, "Размечен"),
+        ("Не размечен", "Не размечен"),
+        ("Отклонён", "Отклонён"),
+        ("В процессе разметки", "В процессе разметки"),
+        ("Размечен", "Размечен"),
     ]
     unique_id = models.UUIDField(default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=20, blank=True, null=True)
@@ -23,18 +23,13 @@ class Study(models.Model):
     done = models.CharField(max_length=10, blank=True, null=True)
     modality = models.CharField(max_length=16, null=True, blank=True)
     patient_id = models.CharField(max_length=255, blank=True, null=True)
-    state = models.CharField(choices=STATE_COICES, default='НР', max_length=3)
+    state = models.CharField(choices=STATE_COICES, default='НР', max_length=20)
     user = models.ForeignKey(UserAccount, on_delete=models.CASCADE)
+    instance_id = models.CharField(max_length=255)
+    comment = models.CharField(max_length=255, default="")
 
     def __str__(self):
         return self.name
-    
-    def all(self):
-        fields = self._meta.get_fields()
-        values = {}
-        for field in fields:
-            values[field.attname] = getattr(self, field.attname)
-        return values
 
     class Meta:
         ordering = ['date_upload']

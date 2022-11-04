@@ -73,6 +73,8 @@ def main():
             single_slice = pydicom.dcmread(dicom_path)
             array.append(single_slice.pixel_array)
         array = np.array(array)
+        single_slice.pixel_array = np.array
+        
 
         # Просто для примера
         image = get_saggital_slice(array, 250)

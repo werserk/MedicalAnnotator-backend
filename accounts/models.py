@@ -37,7 +37,7 @@ class MyUserManager(UserManager):
 
 
 class UserAccount(AbstractUser, PermissionsMixin):
-    unique_id = models.UUIDField(default=uuid.uuid4, editable=False)
+    unique_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     username = models.CharField(max_length=255, unique=True)
     is_advanced = models.BooleanField(default=False)
     studies_completed = models.IntegerField(default=0)

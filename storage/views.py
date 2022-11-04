@@ -4,6 +4,7 @@ import zipfile, os
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions
+from accounts.models import UserAccount
 
 from .models import Study
 from django.conf import settings
@@ -34,8 +35,13 @@ def parse_dicom(file):
         patient_id = data[("0010", "0020")].value
     except KeyError:
         patient_id = "-"
+    
+    try:
+        instance_id = data[("0020", "000E")].value
+    except KeyError:
+        instance_id = "-"
 
-    return name, modality, done, patient_id
+    return name, modality, done, patient_id, instance_id
     
 
 class FileUploadView(APIView):
@@ -50,20 +56,21 @@ class FileUploadView(APIView):
 
         user = self.request.user
         dir_path = settings.MEDIA_ROOT + "/" + user.username + "/" 
+        file = file_obj.read()
 
         try:
             if file_obj.name != "blob" and file_obj.name.split(".")[-1] != "zip":
                 try:
-                    name, modality, done, patient_id = parse_dicom(file_obj.read())
-                    if name == "-":
-                        return Response({"error": "Исследование не имеет имени"}, status=400)
+                    name, modality, done, patient_id, instance_id = parse_dicom(file)
                 except Exception:
                     return Response({"error": "Can't read dicom tags"}, status=400)
-                path = dir_path + str(name) + "/"
+                path = dir_path + str(patient_id) + "/" + str(instance_id) + "/"
                 if not os.path.exists(path):
                     os.makedirs(path)
+                elif os.path.isfile(path + file_obj.name):
+                    return Response({"error": "Вы уже загружали это исследование"}, status=400)
                 with open(path + file_obj.name, "wb") as f:
-                    f.write(file_obj.read())
+                    f.write(file)
             else:
                 original_zip = zipfile.ZipFile(file_obj, 'r')
                 new_zip = zipfile.ZipFile(file_obj.name, 'w')
@@ -75,21 +82,21 @@ class FileUploadView(APIView):
                 if new_zip.namelist():
                     file_obj.name = new_zip.namelist()[0]
                 else:
-                    return Response({"error": "Пустой архив"})
+                    return Response({"error": "Пустой архив"}, status=400)
                 try:
-                    name, modality, done, patient_id = parse_dicom(buffer)
+                    name, modality, done, patient_id, instance_id = parse_dicom(buffer)
                     if name == "-":
                         return Response({"error": "Исследование не имеет имени"}, status=400)
                 except Exception:
                     return Response({"error": "Не удалось прочитать информацию из дайкома"}, status=400)
-                path = dir_path + str(name) + "/"
-                print(os.path.isdir(path))
+                path = dir_path + str(patient_id) + "/" + str(instance_id) + "/"
                 if os.path.isdir(path):
                     return Response({"error": "Вы уже загружали это исследование"}, status=400)
                 new_zip.extractall(path=path)
                 new_zip.close()
-            Study(done=done, name=name, modality=modality, user=user, patient_id=patient_id).save()
-            return Response({"success": f"Successfully uploaded"}, status=200)
+            study = Study(done=done, name=name, modality=modality, user=user, patient_id=patient_id, instance_id=instance_id)
+            study.save()
+            return Response({"success": "Successfully uploaded"}, status=200)
         except Exception:
             Response({"error": "Не смогли загрузить файл"}, status=500)
 
@@ -101,22 +108,98 @@ class StudyProcessingView(APIView):
         user = request.user
         study = user.study_set.get(unique_id=kwargs["unique_id"])
 
-        path = settings.MEDIA_ROOT + "/" + user.username + "/" + study.name + "/"
-        if os.path.isfile(path + study.name):
-            file = open(path + study.name, 'rb')
+        path = settings.MEDIA_ROOT + "/" + user.username + "/" + study.patient_id + "/" + study.instance_id + "/"
+        web_path = user.username + "/" + study.patient_id + "/" + study.instance_id
+
+        file_names = os.listdir(path)
+        web_paths = []
+        for name in file_names:
+            web_paths.append(web_path + "/" + name)
+        return Response({"paths": [web_paths]})
+    
+
+    def patch(self, request, format=None, **kwargs):
+        user = request.user
+        try:
+            study = user.study_set.get(unique_id=kwargs["unique_id"])
+        except Study.DoesNotExist:
+            return Response({"error": "Исследование не найдено"}, status=400)
+        study.comment = request.data['comment']
+        study.save()
+        return Response({"success": "Комментарий успешно обновлен"})
+    
+    def delete(self, request, format=None, **kwargs):
+        user = request.user
+        try:
+            study = user.study_set.get(unique_id=kwargs["unique_id"])
+        except Study.DoesNotExist:
+            return Response({"error": "Исследование не найдено"}, status=400)
+        study.delete()
+        return Response({"success": "Комментарий успешно удален"})
+
+def get_axial_slice(image, ind):
+    return image[ind, :, :]
+
+
+def get_coronal_slice(image, ind):
+    return image[:, ind, :]
+
+
+def get_saggital_slice(image, ind):
+    return image[:, :, ind]
+
+
+def get_my_slices(array, idx, axis=0):
+    window_width = 10
+    left_idx = min(idx - window_width, 0)
+    right_idx = max(idx + window_width, array.shape[axis])
+    for i in range(left_idx, right_idx + 1):
+        if axis == 0:
+            yield get_axial_slice(array, i)
+        elif axis == 1:
+            yield get_coronal_slice(array, i)
+        elif axis == 2:
+            yield get_saggital_slice(array, i)
+
+
+class GetDicomEndpoint(APIView):
+    permission_classes = (permissions.IsAuthenticated, )
+
+    def get(self, request, format=None):
+        path = request.GET.get("path", "")
+        if path:
+            path = settings.MEDIA_ROOT + "/" + path
+            name = path.split("/")[-1]
+
+            file = open(path, 'rb')
             response = HttpResponse(FileWrapper(file), content_type='application/octet-stream')
-            response['Content-Disposition'] = 'attachment; filename="%s"' % study.name
+            response['Content-Disposition'] = 'attachment; filename="%s"' % name
             return response
-        else:
-            file_names = os.listdir(settings.MEDIA_ROOT + "/" + user.username + "/" + study.name + "/")
-            web_paths = []
-            for name in file_names:
-                web_paths.append(settings.MEDIA_URL + user.username + "/" + study.name + "/" + name)
-            return Response({"file": web_paths})
+        return Response({"error": "Некоректный параметр запроса"})
 
 
 class StudyListView(APIView):
     permission_classes = (permissions.IsAuthenticated, )
 
-    def get(self, request, format=None):
-        return Response(request.user.study_set.all().values())
+    def get(self, request, format=None, **kwargs):
+        if "unique_id" in kwargs:
+            try:
+                user = UserAccount.objects.get(unique_id=kwargs["unique_id"])
+            except UserAccount.DoesNotExist:
+                return Response({"error": "Пользователь не найден"})
+        else:
+            user = request.user
+        studies = user.study_set.all()
+        data = []
+        for study in studies:
+            data.append({
+                "unique_id": study.unique_id,
+                "series_id": study.instance_id,
+                "patient_id": study.patient_id,
+                "date_upload": study.date_upload.strftime("%m.%d.%Y"),
+                "date_study": study.done,
+                "modality": study.modality,
+                "state": study.state,
+                "comment": study.comment,
+                "name": study.name})
+        return Response(data, status=200)
