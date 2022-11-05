@@ -1,17 +1,17 @@
-from datetime import datetime
 from io import BytesIO
 import zipfile, os
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions
 from accounts.models import UserAccount
+from utils.dicom_transforms import slice_get_paths
 
 from .models import Study
 from django.conf import settings
 from wsgiref.util import FileWrapper
 from django.http import HttpResponse
 import pydicom
-import numpy as np
+import json
 
 
 # # TODO: processing mult files
@@ -104,63 +104,57 @@ class FileUploadView(APIView):
             Response({"error": "Не смогли загрузить файл"}, status=500)
 
 
-def get_axial_slice(image, ind):
-    return image[ind, :, :]
-
-
-def get_coronal_slice(image, ind):
-    return image[:, ind, :]
-
-
-def get_saggital_slice(image, ind):
-    return image[:, :, ind]
-
-
-def get_my_slices(array, idx, axis=0, window_width=5):
-    left_idx = min(idx - window_width, 0)
-    right_idx = max(idx + window_width, array.shape[axis])
-    for i in range(left_idx, right_idx + 1):
-        if axis == 0:
-            yield get_axial_slice(array, i)
-        elif axis == 1:
-            yield get_coronal_slice(array, i)
-        elif axis == 2:
-            yield get_saggital_slice(array, i)
-
-
-def slice_survey(paths, idx, axis=0, dst_folder='my_folder/'):
-    # paths - все пути секвенции DICOM
-    WINDOW_WIDTH = 5
-    array = []
-    for path in paths:  # Создаём 3D объект
-        single_slice = pydicom.dcmread(path)
-        array.append(single_slice.pixel_array)
-    array = np.array(array)
-
-    # Выбираем нужные нам срезы
-    for i, image in enumerate(get_my_slices(array, idx, axis, window_width=WINDOW_WIDTH)):
-        single_slice.pixel_array = image
-        path = os.path.join(dst_folder, str(axis), str(idx) + '.dcm')
-        single_slice.save_as(path)  # Сохраняем
-        yield path
-
-
 class StudyProcessingView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
 
     def get(self, request, format=None, **kwargs):
         user = request.user
-        study = user.study_set.get(unique_id=kwargs["unique_id"])
+        try:
+            study = user.study_set.get(unique_id=kwargs["unique_id"])
+        except Study.DoesNotExist:
+            return Response({"error": "Исследование не найдено"}, status=400)
+            
+        axial_id = request.GET.get('axial_id', None)
+        coronal_id = request.GET.get('coronal_id', None)
+        saggital_id = request.GET.get('saggital_id', None)
 
         path = settings.MEDIA_ROOT + "/" + user.username + "/" + study.patient_id + "/" + study.instance_id + "/"
-        web_path = user.username + "/" + study.patient_id + "/" + study.instance_id
+        web_path = settings.MEDIA_URL + user.username + "/" + study.patient_id + "/" + study.instance_id + "/"
 
         file_names = os.listdir(path)
-        paths = [path + file_name for file_name in file_names]
+        paths_to_dicoms = [path + file_name for file_name in file_names]
+        if len(paths_to_dicoms) == 1:
+            return Response({
+            "axial_slices_paths": [web_path + paths_to_dicoms[0]], # + json
+            "coronal_slices_paths": [],
+            "saggital_slices_paths": []
+            })
 
-        slices_paths = slice_survey(paths, idx=0)
+        SLICES_FOLDER = path + "slices/"
+        axial_slices_paths, coronal_slices_paths, saggital_slices_paths = slice_get_paths(paths_to_dicoms, SLICES_FOLDER, web_path, axial_id, coronal_id, saggital_id)
 
-        return Response({"paths": [slices_paths]})
+        return Response({
+            "axial_slices_paths": axial_slices_paths,
+            "coronal_slices_paths": coronal_slices_paths,
+            "saggital_slices_paths": saggital_slices_paths
+            })
+    
+    def post(self, request, format=None, **kwargs):
+        user = request.user
+        try:
+            study = user.study_set.get(unique_id=kwargs["unique_id"])
+        except Study.DoesNotExist:
+            return Response({"error": "Исследование не найдено"}, status=400)
+
+        path = settings.MEDIA_ROOT + "/" + user.username + "/" + study.patient_id + "/" + study.instance_id + "/"
+        SLICES_FOLDER = path + "slices/"
+
+        objects = request.data
+        for object in objects:
+            with open(SLICES_FOLDER + object["dst"], 'w') as f:
+                json.dump(object, f)
+        
+        return Response(status=200)
 
     def patch(self, request, format=None, **kwargs):
         user = request.user
@@ -168,6 +162,7 @@ class StudyProcessingView(APIView):
             study = user.study_set.get(unique_id=kwargs["unique_id"])
         except Study.DoesNotExist:
             return Response({"error": "Исследование не найдено"}, status=400)
+
         study.comment = request.data['comment']
         study.save()
         return Response({"success": "Комментарий успешно обновлен"})

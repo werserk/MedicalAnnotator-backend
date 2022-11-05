@@ -64,3 +64,101 @@ def read_survey(path):
     survey = pydicom.dcmread(path)
     scan = survey.pixel_array
     return survey, scan
+
+
+def get_axial_slice(image, ind):
+    return image[ind, :, :]
+
+
+def get_coronal_slice(image, ind):
+    return image[:, ind, :]
+
+
+def get_saggital_slice(image, ind):
+    return image[:, :, ind]
+
+
+def get_my_slices(array, axis=0):
+    for i in range(0, array.shape[axis]):
+        if axis == 0:
+            yield get_axial_slice(array, i)
+        elif axis == 1:
+            yield get_coronal_slice(array, i)
+        elif axis == 2:
+            yield get_saggital_slice(array, i)
+
+
+def slice_survey(paths, dst_folder, axis=0):
+    # paths - все пути секвенции DICOM
+    array = []
+    for path in paths:  # Создаём 3D объект
+        single_slice = pydicom.dcmread(path)
+        array.append(single_slice.pixel_array)
+    array = np.array(array)
+
+    # Выбираем нужные нам срезы
+    for i, image in enumerate(get_my_slices(array, axis)):
+        print(image)
+        single_slice.pixel_array = image # ВОТ ТУТ
+        print(image)
+        path = os.path.join(dst_folder, str(axis), str(i) + '.dcm')
+        single_slice.save_as(path)  # Сохраняем
+
+
+def get_axial_paths(paths, i, web_path):
+    return web_path + paths[i]
+
+
+def get_my_slices_paths(web_path, dst_folder, idx, axis=0):
+    WINDOW_WIDTH = 5
+    
+    paths = os.listdir(dst_folder)
+    left_idx = min(idx - WINDOW_WIDTH, 0)
+    right_idx = min(idx + WINDOW_WIDTH, len(paths) - 1) #???
+    for i in range(left_idx, right_idx + 1):
+        if axis == 0:
+            yield get_axial_slice(paths, i, web_path)
+        elif axis == 1:
+            yield get_coronal_slice(paths, i, web_path)
+        elif axis == 2:
+            yield get_saggital_slice(paths, i, web_path)
+
+
+def slice_get_paths(paths, slices_folder, web_path, axial_id=None, coronal_id=None, saggital_id=None):
+    if os.path.isdir(slices_folder):
+        axial_slices_paths = []
+        coronal_slices_paths = []
+        saggital_slices_paths = []
+        if axial_id != None:
+            axial_slices_paths = list(get_my_slices_paths(web_path=web_path, idx=int(axial_id), dst_folder=slices_folder + "axial/", axis=0))
+        if coronal_id != None:
+            coronal_slices_paths = list(get_my_slices_paths(web_path=web_path, idx=int(coronal_id), dst_folder=slices_folder + "coronal/", axis=1))
+        if saggital_id != None:
+            saggital_slices_paths = list(get_my_slices_paths(web_path=web_path, idx=int(saggital_id), dst_folder=slices_folder + "saggital/", axis=2))
+    else:
+        slice_survey(paths=paths, dst_folder=slices_folder + "axial/", axis=0)
+        slice_survey(paths=paths, dst_folder=slices_folder + "coronal/", axis=1)
+        slice_survey(paths=paths, dst_folder=slices_folder + "saggital/", axis=2)
+        axial_slices_paths = list(get_my_slices_paths(web_path=web_path, idx=0, dst_folder=slices_folder + "axial/", axis=0))
+        coronal_slices_paths = list(get_my_slices_paths(web_path=web_path, idx=0, dst_folder=slices_folder + "coronal/", axis=1))
+        saggital_slices_paths = list(get_my_slices_paths(web_path=web_path, idx=0, dst_folder=slices_folder + "saggital/", axis=2))
+    
+    return axial_slices_paths, coronal_slices_paths, saggital_slices_paths
+    
+
+
+# def slice_survey(paths, idx, dst_folder, axis=0):
+#     # paths - все пути секвенции DICOM
+#     WINDOW_WIDTH = 5
+#     array = []
+#     for path in paths:  # Создаём 3D объект
+#         single_slice = pydicom.dcmread(path)
+#         array.append(single_slice.pixel_array)
+#     array = np.array(array)
+
+#     # Выбираем нужные нам срезы
+#     for i, image in enumerate(get_my_slices(array, axis, window_width=WINDOW_WIDTH)):
+#         single_slice.pixel_array = image
+#         path = os.path.join(dst_folder, str(axis), str(idx) + '.dcm')
+#         single_slice.save_as(path)  # Сохраняем
+#         yield path
