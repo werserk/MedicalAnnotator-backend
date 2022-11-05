@@ -66,11 +66,14 @@ class FileUploadView(APIView):
                     name, modality, done, patient_id, instance_id = parse_dicom(file)
                 except Exception:
                     return Response({"error": "Can't read dicom tags"}, status=400)
+                try:
+                    if Study.objects.get(patient_id=patient_id, instance_id=instance_id):
+                        return Response({"error": "Вы уже загружали это исследование"})
+                except Study.DoesNotExist:
+                    pass
                 path = dir_path + str(patient_id) + "/" + str(instance_id) + "/"
                 if not os.path.exists(path):
                     os.makedirs(path)
-                elif os.path.isfile(path + file_obj.name):
-                    return Response({"error": "Вы уже загружали это исследование"}, status=400)
                 with open(path + file_obj.name, "wb") as f:
                     f.write(file)
             else:
@@ -87,6 +90,11 @@ class FileUploadView(APIView):
                     return Response({"error": "Пустой архив"}, status=400)
                 try:
                     name, modality, done, patient_id, instance_id = parse_dicom(buffer)
+                    try:
+                        if Study.objects.get(patient_id=patient_id, instance_id=instance_id):
+                            return Response({"error": "Вы уже загружали это исследование"})
+                    except Study.DoesNotExist:
+                        pass
                     if name == "-":
                         return Response({"error": "Исследование не имеет имени"}, status=400)
                 except Exception:
@@ -108,6 +116,8 @@ class StudyProcessingView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
 
     def get(self, request, format=None, **kwargs):
+        SLICES_FOLDER = "slices/"
+
         user = request.user
         try:
             study = user.study_set.get(unique_id=kwargs["unique_id"])
@@ -119,24 +129,23 @@ class StudyProcessingView(APIView):
         saggital_id = request.GET.get('saggital_id', None)
 
         path = settings.MEDIA_ROOT + "/" + user.username + "/" + study.patient_id + "/" + study.instance_id + "/"
-        web_path = settings.MEDIA_URL + user.username + "/" + study.patient_id + "/" + study.instance_id + "/"
+        web_path = settings.MEDIA_URL[1:] + user.username + "/" + study.patient_id + "/" + study.instance_id + "/"
 
         file_names = os.listdir(path)
         paths_to_dicoms = [path + file_name for file_name in file_names]
         if len(paths_to_dicoms) == 1:
             return Response({
-            "axial_slices_paths": [web_path + paths_to_dicoms[0]], # + json
-            "coronal_slices_paths": [],
-            "saggital_slices_paths": []
+            "path": [web_path + file_names[0]], # + json
+            "many": 0
             })
 
-        SLICES_FOLDER = path + "slices/"
-        axial_slices_paths, coronal_slices_paths, saggital_slices_paths = slice_get_paths(paths_to_dicoms, SLICES_FOLDER, web_path, axial_id, coronal_id, saggital_id)
+        axial_slices_paths, coronal_slices_paths, saggital_slices_paths = slice_get_paths(paths_to_dicoms, path + SLICES_FOLDER, web_path + SLICES_FOLDER, axial_id, coronal_id, saggital_id)
 
         return Response({
             "axial_slices_paths": axial_slices_paths,
             "coronal_slices_paths": coronal_slices_paths,
-            "saggital_slices_paths": saggital_slices_paths
+            "saggital_slices_paths": saggital_slices_paths,
+            "many": 1
             })
     
     def post(self, request, format=None, **kwargs):
@@ -177,22 +186,6 @@ class StudyProcessingView(APIView):
         return Response({"success": "Комментарий успешно удален"})
 
 
-class GetDicomEndpoint(APIView):
-    permission_classes = (permissions.IsAuthenticated,)
-
-    def get(self, request, format=None):
-        path = request.GET.get("path", "")
-        if path:
-            path = settings.MEDIA_ROOT + "/" + path
-            name = path.split("/")[-1]
-
-            file = open(path, 'rb')
-            response = HttpResponse(FileWrapper(file), content_type='application/octet-stream')
-            response['Content-Disposition'] = 'attachment; filename="%s"' % name
-            return response
-        return Response({"error": "Некоректный параметр запроса"})
-
-
 class StudyListView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
 
@@ -218,3 +211,19 @@ class StudyListView(APIView):
                 "comment": study.comment,
                 "name": study.name})
         return Response(data, status=200)
+
+
+# class GetDicomEndpoint(APIView):
+#     permission_classes = (permissions.IsAuthenticated,)
+
+#     def get(self, request, format=None):
+#         path = request.GET.get("path", "")
+#         if path:
+#             path = settings.MEDIA_ROOT + "/" + path
+#             name = path.split("/")[-1]
+
+#             file = open(path, 'rb')
+#             response = HttpResponse(FileWrapper(file), content_type='application/octet-stream')
+#             response['Content-Disposition'] = 'attachment; filename="%s"' % name
+#             return response
+#         return Response({"error": "Некоректный параметр запроса"})
