@@ -1,10 +1,11 @@
 from io import BytesIO
-import zipfile, os
+import os
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions
 from accounts.models import UserAccount
 from utils.dicom_transforms import slice_get_paths
+from utils.process_files import process_uploaded_zip
 
 from .models import Study
 from django.conf import settings
@@ -46,7 +47,7 @@ def parse_dicom(file):
     return name, modality, done, patient_id, instance_id
 
 
-class FileUploadView(APIView):
+class StudyUploadView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
 
     def put(self, request, format=None):
@@ -58,10 +59,10 @@ class FileUploadView(APIView):
 
         user = self.request.user
         dir_path = settings.MEDIA_ROOT + "/" + user.username + "/"
-        file = file_obj.read()
 
         try:
             if file_obj.name != "blob" and file_obj.name.split(".")[-1] != "zip":
+                file = file_obj.read()
                 try:
                     name, modality, done, patient_id, instance_id = parse_dicom(file)
                 except Exception:
@@ -77,19 +78,13 @@ class FileUploadView(APIView):
                 with open(path + file_obj.name, "wb") as f:
                     f.write(file)
             else:
-                original_zip = zipfile.ZipFile(file_obj, 'r')
-                new_zip = zipfile.ZipFile(file_obj.name, 'w')
-                for item in original_zip.infolist():
-                    buffer = original_zip.read(item.filename)
-                    if not str(item.filename).startswith('__MACOSX/'):
-                        new_zip.writestr(item, buffer)
-                original_zip.close()
+                new_zip, last_file_buffer = process_uploaded_zip(file_obj)
                 if new_zip.namelist():
                     file_obj.name = new_zip.namelist()[0]
                 else:
                     return Response({"error": "Пустой архив"}, status=400)
                 try:
-                    name, modality, done, patient_id, instance_id = parse_dicom(buffer)
+                    name, modality, done, patient_id, instance_id = parse_dicom(last_file_buffer)
                     try:
                         if Study.objects.get(patient_id=patient_id, instance_id=instance_id):
                             return Response({"error": "Вы уже загружали это исследование"})
@@ -107,7 +102,16 @@ class FileUploadView(APIView):
             study = Study(done=done, name=name, modality=modality, user=user, patient_id=patient_id,
                           instance_id=instance_id)
             study.save()
-            return Response({"success": "Successfully uploaded"}, status=200)
+            return Response({
+                "unique_id": study.unique_id,
+                "series_id": study.instance_id,
+                "patient_id": study.patient_id,
+                "date_upload": study.date_upload.strftime("%m.%d.%Y"),
+                "date_study": study.done,
+                "modality": study.modality,
+                "state": study.state,
+                "comment": study.comment,
+                "name": study.name}, status=200)
         except Exception:
             Response({"error": "Не смогли загрузить файл"}, status=500)
 
@@ -171,6 +175,8 @@ class StudyProcessingView(APIView):
             study = user.study_set.get(unique_id=kwargs["unique_id"])
         except Study.DoesNotExist:
             return Response({"error": "Исследование не найдено"}, status=400)
+        
+        print(request)
 
         study.comment = request.data['comment']
         study.save()

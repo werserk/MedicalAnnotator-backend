@@ -79,7 +79,6 @@ def get_saggital_slice(image, ind):
 
 
 def get_my_slices(array, axis=0):
-    print(array.shape[axis])
     for i in range(0, array.shape[axis]):
         if axis == 0:
             yield get_axial_slice(array, i)
@@ -98,7 +97,6 @@ def get_my_slices_paths(web_path, dst_folder, idx, axis=0):
     dicom_file_names = os.listdir(dst_folder)
     left_idx = max(idx - WINDOW_WIDTH, 0)
     right_idx = min(idx + WINDOW_WIDTH, len(dicom_file_names) - 1)  # ???
-    print(left_idx, right_idx)
     for i in range(left_idx, right_idx):
         if axis == 0:
             yield get_slice_path(i, web_path + "axial/")
@@ -140,7 +138,6 @@ def slice_get_paths(paths, slices_folder, web_path, axial_id=None, coronal_id=No
                 get_my_slices_paths(web_path=web_path, idx=int(saggital_id), dst_folder=slices_folder + "saggital/",
                                     axis=2))
     else:
-        print("slice")
         slice_survey(paths=paths, dst_folder=slices_folder + "axial/", axis=0)
         slice_survey(paths=paths, dst_folder=slices_folder + "coronal/", axis=1)
         slice_survey(paths=paths, dst_folder=slices_folder + "saggital/", axis=2)

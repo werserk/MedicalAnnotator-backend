@@ -5,11 +5,11 @@ from django.utils.timezone import now
 import uuid
 
 class MyUserManager(UserManager):
-    def create_user(self, username, password):
+    def create_user(self, username, password, full_name):
         if not username:
             raise ValueError("Users must have a username")
 
-        user = self.model(username=username)
+        user = self.model(username=username, full_name=full_name)
         user.is_active = True
 
         user.set_password(password)
@@ -17,8 +17,8 @@ class MyUserManager(UserManager):
 
         return user
 
-    def create_advanced_user(self, username, password):
-        user = self.create_user(username, password)
+    def create_advanced_user(self, username, password, full_name):
+        user = self.create_user(username, password, full_name)
 
         superuser = SuperUser(related_user=user)
         user.is_advanced = True
@@ -27,8 +27,8 @@ class MyUserManager(UserManager):
         
         return superuser
         
-    def create_common_user(self, username, password=None):
-        user = self.create_user(username, password)
+    def create_common_user(self, username, password, full_name):
+        user = self.create_user(username, password, full_name)
 
         common_user = User(related_user=user)
         common_user.save()
@@ -41,6 +41,7 @@ class UserAccount(AbstractUser, PermissionsMixin):
     username = models.CharField(max_length=255, unique=True)
     is_advanced = models.BooleanField(default=False)
     studies_completed = models.IntegerField(default=0)
+    full_name = models.CharField(max_length=255, default="")
     
     objects = MyUserManager()
 

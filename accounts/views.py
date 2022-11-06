@@ -1,7 +1,7 @@
 from django.http import Http404
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import permissions, status
+from rest_framework import permissions
 
 from accounts.serializers import UsersListViewSerializer
 from .models import UserAccount, User
@@ -15,6 +15,7 @@ class SignupView(APIView):
         username = data["username"]
         password = data["password"]
         password2 = data["password2"]
+        full_name = data["fullName"]
         if "is_superuser" in data:
             is_superuser = data["is_superuser"]
         else:
@@ -28,10 +29,10 @@ class SignupView(APIView):
                     return Response({"error": "Password must be at least 6 characters"})
                 else:
                     if is_superuser:
-                        UserAccount.objects.create_advanced_user(password=password, username=username)
+                        UserAccount.objects.create_advanced_user(password=password, username=username, full_name=full_name)
                         return Response({"success": "User created successfully"})
                     else:
-                        UserAccount.objects.create_common_user(password=password, username=username)
+                        UserAccount.objects.create_common_user(password=password, username=username, full_name=full_name)
                         return Response({"success": "User created successfully"})
         else:
             return Response({"error": "Passwords do not match"})
@@ -55,7 +56,8 @@ class UsersListView(APIView):
                 {"username": related_user.username,
                 "studies_completed": related_user.studies_completed,
                 "studies": related_user.study_set.all().count(),
-                "unique_id": related_user.unique_id
+                "unique_id": related_user.unique_id,
+                "full_name": related_user.full_name,
                 }
             )
         return Response(data)
